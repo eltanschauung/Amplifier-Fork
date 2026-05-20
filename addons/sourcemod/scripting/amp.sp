@@ -158,7 +158,6 @@ public OnPluginStart()
 	RegConsoleCmd("sm_p", CallPanel, "Select engineer's building type");
 	RegConsoleCmd("sm_amp", CallPanel, "Select engineer's building type");
 	RegConsoleCmd("sm_amphelp", HelpPanel, "Show info about Amplifier");
-	RegConsoleCmd("sm_amphelp", HelpPanel, "Show info about Amplifier");
 	RegConsoleCmd("sm_ah", HelpPanel, "Show info about Amplifier");
 	RegConsoleCmd("sm_ph", HelpPanel, "Show info about Amplifier");
 	RegConsoleCmd("sm_killsentries", Command_KillSentries, "Destroy all sentry guns");
@@ -394,23 +393,6 @@ public Action:HelpPanel(client, Args)
 
 	SendPanelToClient(panel, client, AmpHelpPanelH, 20);
 	CloseHandle(panel);
-}
-
-public Action HelpPanel_Chat(int client, int Args)
-{
-    CPrintToChat(client, "{green}=== Amplifier Info ===");
-    CPrintToChat(client, "{default}Amplifiers can replace Sentries or Dispensers");
-    CPrintToChat(client, "{default}They consume metal to provide a fire rate & reload speed bonus to nearby teammates");
-    CPrintToChat(client, "{default}Hit with wrench to refill");
-
-    CPrintToChat(client, "{lightgreen}=== Jump/Speed Pad Info ===");
-    CPrintToChat(client, "{default}Teleporters can be converted to Jump or Speed pads");
-    CPrintToChat(client, "{default}Turn your pad once to place a jump pad instead of a speed pad");
-
-    CPrintToChat(client, "{blue}=== How To Use? ===");
-    CPrintToChat(client, "{default}Use {green}!a{default} or {green}!p{default} to toggle these buildings");
-
-    return Plugin_Handled;
 }
 
 public Action:CallPanel(client, Args)
@@ -925,17 +907,20 @@ CheckBuilding(ent)
     bool forcedConversion = false;
     bool playercountForceActive = IsPlayercountForceActive();
     int effectiveForceAmplifier = GetEffectiveForceAmplifier();
+	bool hasAmplifierAttribute = (isDispenser && CheckAmpAttributesDisp(Client))
+		|| (isSentry && CheckAmpAttributesSentry(Client));
+	bool hasAmplifierPreference = (isDispenser && g_PlayerState[Client].useDispenser)
+		|| (isSentry && g_PlayerState[Client].useSentry);
+	bool playerRequestedAmplifier = hasAmplifierAttribute || hasAmplifierPreference;
 
 	// Check force mode
     if (effectiveForceAmplifier == 1 && isDispenser) { shouldConvert = true; forcedConversion = true; }
     else if (effectiveForceAmplifier == 2 && isSentry) { shouldConvert = true; forcedConversion = true; }
     else if (effectiveForceAmplifier == 3) { shouldConvert = true; forcedConversion = true; }
 	// Check custom attributes
-	else if (isDispenser && CheckAmpAttributesDisp(Client)) shouldConvert = true;
-	else if (isSentry && CheckAmpAttributesSentry(Client)) shouldConvert = true;
+	else if (hasAmplifierAttribute) shouldConvert = true;
 	// Check player preference
-	else if (isDispenser && g_PlayerState[Client].useDispenser) shouldConvert = true;
-	else if (isSentry && g_PlayerState[Client].useSentry) shouldConvert = true;
+	else if (hasAmplifierPreference) shouldConvert = true;
 
     if (shouldConvert)
     {
@@ -972,7 +957,7 @@ CheckBuilding(ent)
 		SetEntProp(ent, Prop_Send, "m_nSkin", GetEntProp(ent, Prop_Send, "m_nSkin") + 2);
         CreateTimer(1.0, BuildingCheckStage1, EntIndexToEntRef(ent));
 
-        if (forcedConversion && effectiveForceAmplifier == 2)
+        if (forcedConversion && effectiveForceAmplifier == 2 && !playerRequestedAmplifier)
         {
             if (playercountForceActive)
             {
@@ -1317,15 +1302,6 @@ public Native_ConvertToAmplifier(Handle:plugin, numParams)
 stock bool:IsValidClient(client)
 {
 	return (client > 0 && client <= MaxClients && IsClientInGame(client));
-}
-
-stock void ClearTimer(Handle hTimer)
-{
-	if (hTimer != INVALID_HANDLE)
-	{
-		KillTimer(hTimer);
-		hTimer = INVALID_HANDLE;
-	}
 }
 
 void DealElectricDamage(int client, int builder, const float pos[3], float damage)
